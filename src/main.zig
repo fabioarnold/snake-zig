@@ -2,8 +2,9 @@ const std = @import("std");
 const panic = std.debug.panic;
 const warn = std.debug.warn;
 const c_allocator = std.heap.c_allocator;
+const rand = std.rand;
 
-var r = std.rand.DefaultPrng.init(0);
+var r = rand.DefaultPrng.init(4); // seed chosen by dice roll
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
