@@ -3,6 +3,8 @@ const panic = std.debug.panic;
 const warn = std.debug.warn;
 const c_allocator = std.heap.c_allocator;
 
+var r = std.rand.DefaultPrng.init(0);
+
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cDefine("GL_GLEXT_PROTOTYPES", "1");
@@ -10,10 +12,6 @@ const c = @cImport({
 });
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
-
-const SDL_GL_CONTEXT_PROFILE_MASK = @intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK);
-const SDL_GL_CONTEXT_MAJOR_VERSION = @intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION);
-const SDL_GL_CONTEXT_MINOR_VERSION = @intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION);
 
 extern fn SDL_PollEvent(event: *c.SDL_Event) c_int;
 
@@ -27,35 +25,43 @@ fn identityM3() [9]f32 {
     };
 }
 
-fn translateM3(m: [9]f32, tx: f32, ty: f32) void {
-    m[0] = 1.0; m[3] = 0.0; m[6] = tx;
-    m[1] = 0.0; m[4] = 1.0; m[7] = ty;
-    m[2] = 0.0; m[5] = 0.0; m[8] = 1.0;
+fn translateM3(tx: f32, ty: f32) [9]f32 {
+    return [9]f32 {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+         tx,  ty, 1.0,
+    };
 }
 
 fn scaleM3(sx: f32, sy: f32) [9]f32 {
     return [9]f32 {
-        sx,  0.0, 0.0,
-        0.0, sy,  0.0,
+         sx, 0.0, 0.0,
+        0.0,  sy, 0.0,
         0.0, 0.0, 1.0,
     };
 }
 
-fn rotateM3(m: [9]f32, angle: f32) void {
-    const s = sinf(angle);
-    const c = cosf(angle);
-    m[0] =   c; m[3] =  -s; m[6] = 0.0;
-    m[1] =   s; m[4] =   c; m[7] = 0.0;
-    m[2] = 0.0; m[5] = 0.0; m[8] = 1.0;
+fn rotateM3(angle: f32) [9]f32 {
+    const si = @sin(f32, angle);
+    const co = @cos(f32, angle);
+    return [9]f32 {
+         co,  si, 0.0,
+        -si,  co, 0.0,
+        0.0, 0.0, 1.0,
+    };
 }
 
-fn multiplyM3(m: [9]f32, m0: [9]f32, m1: [9]f32) void {
-    @memSet(m, 0, 9 * @sizeOf(f32));
-    const nums = [_]i32{0, 1, 2};
-    for (nums) |i|
-    for (nums) |j|
-    for (nums) |k|
-        m[3 * j + i] += m0[3 * j + k] * m1[3 * k + i];
+fn multiplyM3(m0: [9]f32, m1: [9]f32) [9]f32 {
+    var m = [_]f32{0.0} ** 9;
+    const nums = [_]usize{0, 1, 2};
+    for (nums) |i| {
+        for (nums) |j| {
+            for (nums) |k| {
+                m[3 * j + i] += m0[3 * j + k] * m1[3 * k + i];
+            }
+        }
+    }
+    return m;
 }
 
 fn initGlShader(kind: c.GLenum, source: []const u8) !c.GLuint {
@@ -131,12 +137,12 @@ const Segment = struct {
 
 const Game = struct {
     snake: [N]Segment,
-    head: i32,
-    tail: i32,
+    head: usize,
+    tail: usize,
     dir: Direction,
 
-    fn snakeLength(self: Game) i32 {
-        return (head + 1 - tail + N) % N;
+    fn snakeLength(self: Game) usize {
+        return ((self.head + N + 1) - self.tail) % N;
     }
 
     food_x: i32,
@@ -145,122 +151,242 @@ const Game = struct {
 
     gameover: bool,
 
-    fn reset(self: Game) void {
-        head = 1;
-        tail = 0;
-        dir = SOUTH;
+    fn reset(self: *Game) void {
+        self.head = 1;
+        self.tail = 0;
+        self.dir = Direction.SOUTH;
 
-        snake[head] = Segment.init(W / 2, H - 3, SOUTH);
-        snake[tail] = Segment.init(W / 2, H - 2, SOUTH);
+        self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.SOUTH);
+        self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.SOUTH);
 
-        gameover = false;
+        self.gameover = false;
 
-        placeFood();
-        eaten = false;
+        self.placeFood();
+        self.eaten = false;
     }
 
-    fn placeFood(self: Game) void {
-
+    fn onGameover(self: *Game) void {
+        self.gameover = true;
+        warn("snake length: {}\n", self.snakeLength());
     }
 
-    fn tick(self: Game) void {
-        if (gameover) return;
-
-        var h = &snake[head];
-        switch (h.dir) {
-            NORTH => { if (dir == SOUTH) dir = NORTH; },
-            SOUTH => { if (dir == NORTH) dir = SOUTH; },
-            EAST => { if (dir == WEST) dir = EAST; },
-            WEST => { if (dir == EAST) dir = WEST; },
+    fn placeFood(self: *Game) void {
+        const len = self.snakeLength();
+        var grid = [_]bool{false} ** N; // mark occupied cells
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const s = &self.snake[(self.tail + i) % N];
+            grid[W * @intCast(usize, s.y) + @intCast(usize, s.x)] = true;
         }
-        if ((dir == NORTH and h.y == H - 1) or
-            (dir == SOUTH and h.y == 0) or
-            (dir == EAST  and h.x == W - 1) or
-            (dir == WEST  and h.x == 0)) {
-            gameover();
+        var f = r.random.uintLessThan(usize, N - len); // choose free cell index
+        i = 0;
+        while (i < N) : (i += 1) {
+            if (!grid[i]) {
+                if (f == 0) {
+                    self.food_x = @intCast(i32, i % W);
+                    self.food_y = @intCast(i32, i / W);
+                    return;
+                }
+                f -= 1;
+            }
+        }
+    }
+
+    fn tick(self: *Game) void {
+        if (self.gameover) return;
+
+        var h = &self.snake[self.head];
+        switch (h.dir) {
+            Direction.NORTH => { if (self.dir == Direction.SOUTH) self.dir = Direction.NORTH; },
+            Direction.SOUTH => { if (self.dir == Direction.NORTH) self.dir = Direction.SOUTH; },
+            Direction.EAST => { if (self.dir == Direction.WEST) self.dir = Direction.EAST; },
+            Direction.WEST => { if (self.dir == Direction.EAST) self.dir = Direction.WEST; },
+        }
+        if ((self.dir == Direction.NORTH and h.y == H - 1) or
+            (self.dir == Direction.SOUTH and h.y == 0) or
+            (self.dir == Direction.EAST  and h.x == W - 1) or
+            (self.dir == Direction.WEST  and h.x == 0)) {
+            self.onGameover();
             return;
         }
+
+        self.head = (self.head + 1) % N;
+        switch (self.dir) {
+            Direction.NORTH => self.snake[self.head] = Segment.init(h.x, h.y + 1, Direction.NORTH),
+            Direction.SOUTH => self.snake[self.head] = Segment.init(h.x, h.y - 1, Direction.SOUTH),
+            Direction.EAST  => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.EAST ),
+            Direction.WEST  => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.WEST ),
+        }
+        h = &self.snake[self.head];
+
+        var i: usize = self.tail;
+        while (i != self.head) : (i = (i + 1) % N) {
+            if (h.x == self.snake[i].x and h.y == self.snake[i].y) {
+                self.onGameover();
+                return;
+            }
+        }
+
+        if (h.x == self.food_x and h.y == self.food_y) {
+            self.eaten = true;
+            if (self.head == self.tail) {
+                self.onGameover();
+                return;
+            }
+            self.placeFood();
+        } else {
+            self.eaten = false;
+            self.tail = (self.tail + 1) % N;
+        }
     }
 };
+var game: Game = undefined;
 
-const App = struct {
-    program: c.GLuint = undefined,
-    transform_loc: c.GLint = undefined,
-    color_loc: c.GLint = undefined,
-    rect_vertex_buffer: c.GLuint = undefined,
+var default_shader: c.GLuint = undefined;
+var transform_loc: c.GLint = undefined;
+var color_loc: c.GLint = undefined;
+var sprite_vertex_buffer: c.GLuint = undefined;
+var rect_vertex_buffer: c.GLuint = undefined;
 
-    fn init() App {
-        var app: App = undefined;
+fn initGL() void {
+    default_shader = makeShader(
+        \\uniform mat3 transform;
+        \\attribute vec2 position;
+        \\void main() {
+        \\    vec3 p = transform * vec3(position, 1.0);
+        \\    gl_Position = vec4(p.xy, 0.0, 1.0);
+        \\}
+        ,
+        \\uniform vec3 color;
+        \\void main() {
+        \\    gl_FragColor = vec4(color, 1.0);
+        \\}
+    ) catch 0;
+    c.glUseProgram(default_shader);
+    transform_loc = c.glGetUniformLocation(default_shader, c"transform");
+    color_loc = c.glGetUniformLocation(default_shader, c"color");
 
-        app.program = makeShader(
-            \\uniform mat3 transform;
-            \\attribute vec2 position;
-            \\void main() {
-            \\    vec3 p = transform * vec3(position, 1.0);
-            \\    gl_Position = vec4(p.xy, 0.0, 1.0);
-            \\}
-            ,
-            \\uniform vec3 color;
-            \\void main() {
-            \\    gl_FragColor = vec4(color, 1.0);
-            \\}
-        ) catch 0;
-        c.glUseProgram(app.program);
-        app.transform_loc = c.glGetUniformLocation(app.program, c"transform");
-        app.color_loc = c.glGetUniformLocation(app.program, c"color");
+    const rect_data = [_]f32 {
+        -1.0, -1.0,
+         1.0, -1.0,
+         1.0,  1.0,
+        -1.0,  1.0,
+    };
+    c.glGenBuffers(1, &sprite_vertex_buffer);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, sprite_vertex_buffer);
+    c.glBufferData(c.GL_ARRAY_BUFFER, 4 * vertex_buffer.len * @sizeOf(f32),
+        null, c.GL_DYNAMIC_DRAW);
+    c.glGenBuffers(1, &rect_vertex_buffer);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, rect_vertex_buffer);
+    c.glBufferData(c.GL_ARRAY_BUFFER, rect_data.len * @sizeOf(f32),
+        &rect_data[0], c.GL_STATIC_DRAW);
+}
 
-        const rect_data = [_]f32 {
-            -1.0, -1.0,
-             1.0, -1.0,
-             1.0,  1.0,
-            -1.0,  1.0,
-        };
-        c.glGenBuffers(1, &app.rect_vertex_buffer);
-        //c.glBindBuffer(c.GL_ARRAY_BUFFER, app.vbos[0]);
-        //c.glBufferData(c.GL_ARRAY_BUFFER, 4 * sizeof(vertex_data), null, c.GL_DYNAMIC_DRAW);
-        c.glBindBuffer(c.GL_ARRAY_BUFFER, app.rect_vertex_buffer);
-        c.glBufferData(c.GL_ARRAY_BUFFER, rect_data.len * @sizeOf(f32), 
-            @ptrCast(*const c_void, &rect_data[0]), c.GL_STATIC_DRAW);
+const draw_detail = 16;
+var vertex_buffer: [4 * (draw_detail + 1)]f32 = undefined;
 
-        return app;
+fn drawGame(alpha: f32) void {
+    var width: c_int = undefined;
+    var height: c_int = undefined;
+    c.SDL_GL_GetDrawableSize(sdl_window, &width, &height);
+    c.glViewport(0, 0, width, height);
+    c.glClearColor(1.0, 1.0, 1.0, 1.0);
+    c.glClear(c.GL_COLOR_BUFFER_BIT);
+
+    var scale: [9]f32 = undefined;
+
+    var a0: f32 = @intToFloat(f32, width) / @intToFloat(f32, height);
+    var a1: f32 = @intToFloat(f32, W) / @intToFloat(f32, H);
+    var sx: f32 = 1.0;
+    var sy: f32 = 1.0;
+    if (a0 > a1) {sx = a1 / a0;}
+    else {sy = a0 / a1;}
+
+    // background
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, rect_vertex_buffer);
+    c.glEnableVertexAttribArray(0); // position
+    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    scale = scaleM3(sx, sy);
+    c.glUniformMatrix3fv(transform_loc, 1, c.GL_FALSE, &scale[0]);
+    c.glUniform3f(color_loc, 0.3, 0.3, 0.5);
+    c.glDrawArrays(c.GL_LINE_LOOP, 0, 4);
+
+    // sprite types
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, sprite_vertex_buffer);
+    c.glEnableVertexAttribArray(0); // position
+    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    for ([_]usize{0, 1, 2, 3}) |s| {
+        var i: usize = 0;
+        while (i <= draw_detail) : (i += 1) {
+            const angle = @intToFloat(f32, i) / @intToFloat(f32, draw_detail) * std.math.pi;
+            vertex_buffer[2 * i + 0] = @cos(f32, angle);
+            vertex_buffer[2 * i + 1] = @sin(f32, angle);
+            vertex_buffer[2 * (draw_detail + 1 + i) + 0] = -@cos(f32, angle);
+            vertex_buffer[2 * (draw_detail + 1 + i) + 1] = -@sin(f32, angle) - 2.0;
+            if (s == 1) { // head
+                vertex_buffer[2 * i + 1] += 2.0 * alpha - 2.0;
+            } else if (s == 2) { // tail
+                vertex_buffer[2 * (draw_detail + 1 + i) + 1] += 
+                    if (game.eaten) 2.0 else 2.0 * alpha;
+            } else if (s == 3) { // food
+                vertex_buffer[2 * (draw_detail + 1 + i) + 1] += 2.0;
+            }
+        }
+        c.glBufferSubData(c.GL_ARRAY_BUFFER, 
+            @intCast(c_long, s * vertex_buffer.len * @sizeOf(f32)), 
+            vertex_buffer.len * @sizeOf(f32), &vertex_buffer[0]);
+    }
+    const n = 2 * (draw_detail + 1);
+
+    // snake
+    scale = scaleM3(sx / W, sy / H);
+    c.glUniform3f(color_loc, 0.3, 0.7, 0.1);
+    var i = game.tail;
+    while (true) : (i = (i + 1) % N) {
+        const s = &game.snake[i];
+        var stype: i32 = 0;
+        if (i == game.tail) {
+            stype = 2;
+        } else if (i == game.head) {
+            stype = 1;
+        }
+        const translation = translateM3(
+            2.0 * @intToFloat(f32, s.x) - @intToFloat(f32, W) + 1.0, 
+            2.0 * @intToFloat(f32, s.y) - @intToFloat(f32, H) + 1.0);
+        var rt: i32 = undefined;
+        switch (s.dir) {
+            Direction.NORTH => rt = 0,
+            Direction.SOUTH => rt = 2,
+            Direction.EAST  => rt = 3,
+            Direction.WEST  => rt = 1,
+        }
+        const rotation = rotateM3(@intToFloat(f32, rt) / 2.0 * std.math.pi);
+        const tmp = multiplyM3(translation, scale);
+        const transform = multiplyM3(rotation, tmp);
+        c.glUniformMatrix3fv(transform_loc, 1, c.GL_FALSE, &transform[0]);
+
+        c.glDrawArrays(c.GL_TRIANGLE_FAN, stype * n, n);
+        if (i == game.head) break;
     }
 
-    fn drawGame(self: App) void {
-        var width: c_int = undefined;
-        var height: c_int = undefined;
-        c.SDL_GL_GetDrawableSize(sdl_window, &width, &height);
-        c.glViewport(0, 0, width, height);
-        c.glClearColor(1.0, 1.0, 1.0, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
-
-        var scale: [9]f32 = undefined;
-
-        var a0: f32 = @intToFloat(f32, width) / @intToFloat(f32, height);
-        var a1: f32 = @intToFloat(f32, W) / @intToFloat(f32, H);
-        var sx: f32 = 1.0;
-        var sy: f32 = 1.0;
-        if (a0 > a1) {sx = a1 / a0;}
-        else {sy = a0 / a1;}
-
-        // background
-        c.glBindBuffer(c.GL_ARRAY_BUFFER, self.rect_vertex_buffer);
-        c.glEnableVertexAttribArray(0); // position
-        c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
-        scale = scaleM3(sx, sy);
-        c.glUniformMatrix3fv(self.transform_loc, 1, c.GL_FALSE, &scale[0]);
-        c.glUniform3f(self.color_loc, 0.3, 0.3, 0.5);
-        c.glDrawArrays(c.GL_LINE_LOOP, 0, 4);
-
-        c.SDL_GL_SwapWindow(sdl_window);
+    // food
+    if (!game.gameover) {
+        c.glUniform3f(color_loc, 1.0, 0.2, 0.0);
+        var translation = translateM3(
+            2.0 * @intToFloat(f32, game.food_x) - @intToFloat(f32, W) + 1.0, 
+            2.0 * @intToFloat(f32, game.food_y) - @intToFloat(f32, H) + 1.0);
+        var transform = multiplyM3(translation, scale);
+        c.glUniformMatrix3fv(transform_loc, 1, c.GL_FALSE, &transform[0]);
+        c.glDrawArrays(c.GL_TRIANGLE_FAN, 3 * n, n);
     }
-};
+
+    c.SDL_GL_SwapWindow(sdl_window);
+}
 
 extern fn sdlEventWatch(userdata: ?*c_void, sdl_event: [*c]c.SDL_Event) c_int {
-    var app: *App = @ptrCast(*App, @alignCast(@alignOf(*App), userdata));
-
     if (sdl_event.*.type == c.SDL_WINDOWEVENT and
         sdl_event.*.window.event == c.SDL_WINDOWEVENT_RESIZED) {
-        app.drawGame(); // draw while resizing
+        drawGame(1.0); // draw while resizing
         return 0; // handled
     }
     return 1;
@@ -276,18 +402,19 @@ pub fn main() !void {
     }
     defer c.SDL_Quit();
 
-    _ = c.SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK),
         c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-    _ = c.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    _ = c.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 2);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLEBUFFERS), 1);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLESAMPLES), 4);
 
     sdl_window = c.SDL_CreateWindow(c"Snake",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         video_width, video_height,
         c.SDL_WINDOW_OPENGL |
         c.SDL_WINDOW_RESIZABLE |
-        c.SDL_WINDOW_ALLOW_HIGHDPI) orelse
-        {
+        c.SDL_WINDOW_ALLOW_HIGHDPI) orelse {
         c.SDL_Log(c"Unable to create window: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     };
@@ -298,25 +425,49 @@ pub fn main() !void {
 
     _ = c.SDL_GL_SetSwapInterval(1);
 
-    var app = App.init();
+    c.SDL_AddEventWatch(sdlEventWatch, null);
 
-    c.SDL_AddEventWatch(sdlEventWatch, &app);
+    initGL();
+
+    game.reset();
+    game.gameover = true;
+    var last_ticks = c.SDL_GetTicks();
 
     var quit = false;
     while (!quit) {
         var event: c.SDL_Event = undefined;
         while (SDL_PollEvent(&event) != 0) {
             switch (event.@"type") {
-                c.SDL_QUIT => {
-                    quit = true;
-                },
+                c.SDL_QUIT => quit = true,
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
+                    switch (event.key.keysym.sym) {
+                        c.SDLK_UP    => game.dir = Direction.NORTH,
+                        c.SDLK_DOWN  => game.dir = Direction.SOUTH,
+                        c.SDLK_RIGHT => game.dir = Direction.EAST,
+                        c.SDLK_LEFT  => game.dir = Direction.WEST,
+                        else => {},
+                    }
+                    if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
+                        game.reset();
+                        last_ticks = c.SDL_GetTicks();
+                        game.tick();
+                    }
                 },
                 else => {},
             }
         }
 
-        app.drawGame();
+        var alpha: f32 = 1.0;
+        if (!game.gameover) {
+            const ticks = c.SDL_GetTicks();
+            while (ticks >= last_ticks + 120) {
+                game.tick();
+                last_ticks += 120;
+            }
+            alpha = @intToFloat(f32, ticks - last_ticks) / 120.0;
+        }
+        if (game.gameover) alpha = 1.0;
+        drawGame(alpha);
     }
 }
