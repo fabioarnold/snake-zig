@@ -19,7 +19,7 @@ extern fn SDL_PollEvent(event: *c.SDL_Event) c_int;
 var sdl_window: *c.SDL_Window = undefined;
 
 fn identityM3() [9]f32 {
-    return [9]f32 {
+    return [9]f32{
         1.0, 0.0, 0.0,
         0.0, 1.0, 0.0,
         0.0, 0.0, 1.0,
@@ -27,34 +27,34 @@ fn identityM3() [9]f32 {
 }
 
 fn translateM3(tx: f32, ty: f32) [9]f32 {
-    return [9]f32 {
+    return [9]f32{
         1.0, 0.0, 0.0,
         0.0, 1.0, 0.0,
-         tx,  ty, 1.0,
+        tx,  ty,  1.0,
     };
 }
 
 fn scaleM3(sx: f32, sy: f32) [9]f32 {
-    return [9]f32 {
-         sx, 0.0, 0.0,
-        0.0,  sy, 0.0,
+    return [9]f32{
+        sx,  0.0, 0.0,
+        0.0, sy,  0.0,
         0.0, 0.0, 1.0,
     };
 }
 
 fn rotateM3(angle: f32) [9]f32 {
-    const si = @sin(f32, angle);
-    const co = @cos(f32, angle);
-    return [9]f32 {
-         co,  si, 0.0,
-        -si,  co, 0.0,
+    const si = @sin(angle);
+    const co = @cos(angle);
+    return [9]f32{
+        co,  si,  0.0,
+        -si, co,  0.0,
         0.0, 0.0, 1.0,
     };
 }
 
 fn multiplyM3(m0: [9]f32, m1: [9]f32) [9]f32 {
     var m = [_]f32{0.0} ** 9;
-    const nums = [_]usize{0, 1, 2};
+    const nums = [_]usize{ 0, 1, 2 };
     for (nums) |i| {
         for (nums) |j| {
             for (nums) |k| {
@@ -81,7 +81,7 @@ fn initGlShader(kind: c.GLenum, source: []const u8) !c.GLuint {
 
     const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
     c.glGetShaderInfoLog(shader_id, error_size, &error_size, message.ptr);
-    panic("Error compiling {} shader:\n{}\n", kind, message);
+    panic("Error compiling {} shader:\n{}\n", .{ kind, message });
 }
 
 fn makeShader(vert_src: []const u8, frag_src: []const u8) !c.GLuint {
@@ -93,14 +93,14 @@ fn makeShader(vert_src: []const u8, frag_src: []const u8) !c.GLuint {
     c.glAttachShader(program, vert_shader);
     c.glAttachShader(program, frag_shader);
     c.glLinkProgram(program);
-    
+
     c.glGetProgramiv(program, c.GL_LINK_STATUS, &ok);
     if (ok == 0) {
         var error_size: c.GLint = undefined;
         c.glGetProgramiv(program, c.GL_INFO_LOG_LENGTH, &error_size);
         const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
         c.glGetProgramInfoLog(program, error_size, &error_size, message.ptr);
-        panic("Error linking shader program: {}\n", message);
+        panic("Error linking shader program: {}\n", .{message});
     }
 
     c.glDetachShader(program, vert_shader);
@@ -116,10 +116,10 @@ const H = 15;
 const N = W * H;
 
 const Direction = enum {
-    NORTH,
-    SOUTH,
-    EAST,
-    WEST,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
 };
 
 const Segment = struct {
@@ -128,7 +128,7 @@ const Segment = struct {
     dir: Direction,
 
     pub fn init(x: i32, y: i32, dir: Direction) Segment {
-        return Segment {
+        return Segment{
             .x = x,
             .y = y,
             .dir = dir,
@@ -142,23 +142,23 @@ const Game = struct {
     tail: usize,
     dir: Direction,
 
-    fn snakeLength(self: Game) usize {
-        return ((self.head + N + 1) - self.tail) % N;
-    }
-
     food_x: i32,
     food_y: i32,
     eaten: bool,
 
     gameover: bool,
 
+    fn snakeLength(self: Game) usize {
+        return ((self.head + N + 1) - self.tail) % N;
+    }
+
     fn reset(self: *Game) void {
         self.head = 1;
         self.tail = 0;
-        self.dir = Direction.SOUTH;
+        self.dir = Direction.DOWN;
 
-        self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.SOUTH);
-        self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.SOUTH);
+        self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.DOWN);
+        self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.DOWN);
 
         self.gameover = false;
 
@@ -168,7 +168,7 @@ const Game = struct {
 
     fn onGameover(self: *Game) void {
         self.gameover = true;
-        warn("snake length: {}\n", self.snakeLength());
+        warn("snake length: {}\n", .{self.snakeLength()});
     }
 
     fn placeFood(self: *Game) void {
@@ -198,25 +198,34 @@ const Game = struct {
 
         var h = &self.snake[self.head];
         switch (h.dir) {
-            Direction.NORTH => { if (self.dir == Direction.SOUTH) self.dir = Direction.NORTH; },
-            Direction.SOUTH => { if (self.dir == Direction.NORTH) self.dir = Direction.SOUTH; },
-            Direction.EAST => { if (self.dir == Direction.WEST) self.dir = Direction.EAST; },
-            Direction.WEST => { if (self.dir == Direction.EAST) self.dir = Direction.WEST; },
+            Direction.UP => {
+                if (self.dir == Direction.DOWN) self.dir = Direction.UP;
+            },
+            Direction.DOWN => {
+                if (self.dir == Direction.UP) self.dir = Direction.DOWN;
+            },
+            Direction.LEFT => {
+                if (self.dir == Direction.RIGHT) self.dir = Direction.LEFT;
+            },
+            Direction.RIGHT => {
+                if (self.dir == Direction.LEFT) self.dir = Direction.RIGHT;
+            },
         }
-        if ((self.dir == Direction.NORTH and h.y == H - 1) or
-            (self.dir == Direction.SOUTH and h.y == 0) or
-            (self.dir == Direction.EAST  and h.x == W - 1) or
-            (self.dir == Direction.WEST  and h.x == 0)) {
+        if ((self.dir == Direction.UP and h.y == H - 1) or
+            (self.dir == Direction.DOWN and h.y == 0) or
+            (self.dir == Direction.LEFT and h.x == W - 1) or
+            (self.dir == Direction.RIGHT and h.x == 0))
+        {
             self.onGameover();
             return;
         }
 
         self.head = (self.head + 1) % N;
         switch (self.dir) {
-            Direction.NORTH => self.snake[self.head] = Segment.init(h.x, h.y + 1, Direction.NORTH),
-            Direction.SOUTH => self.snake[self.head] = Segment.init(h.x, h.y - 1, Direction.SOUTH),
-            Direction.EAST  => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.EAST ),
-            Direction.WEST  => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.WEST ),
+            Direction.UP => self.snake[self.head] = Segment.init(h.x, h.y + 1, Direction.UP),
+            Direction.DOWN => self.snake[self.head] = Segment.init(h.x, h.y - 1, Direction.DOWN),
+            Direction.LEFT => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.LEFT),
+            Direction.RIGHT => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.RIGHT),
         }
         h = &self.snake[self.head];
 
@@ -257,30 +266,28 @@ fn initGL() void {
         \\    vec3 p = transform * vec3(position, 1.0);
         \\    gl_Position = vec4(p.xy, 0.0, 1.0);
         \\}
-        ,
+    ,
         \\uniform vec3 color;
         \\void main() {
         \\    gl_FragColor = vec4(color, 1.0);
         \\}
     ) catch 0;
     c.glUseProgram(default_shader);
-    transform_loc = c.glGetUniformLocation(default_shader, c"transform");
-    color_loc = c.glGetUniformLocation(default_shader, c"color");
+    transform_loc = c.glGetUniformLocation(default_shader, "transform");
+    color_loc = c.glGetUniformLocation(default_shader, "color");
 
-    const rect_data = [_]f32 {
+    const rect_data = [_]f32{
         -1.0, -1.0,
-         1.0, -1.0,
-         1.0,  1.0,
-        -1.0,  1.0,
+        1.0,  -1.0,
+        1.0,  1.0,
+        -1.0, 1.0,
     };
     c.glGenBuffers(1, &sprite_vertex_buffer);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, sprite_vertex_buffer);
-    c.glBufferData(c.GL_ARRAY_BUFFER, 4 * vertex_buffer.len * @sizeOf(f32),
-        null, c.GL_DYNAMIC_DRAW);
+    c.glBufferData(c.GL_ARRAY_BUFFER, 4 * vertex_buffer.len * @sizeOf(f32), null, c.GL_DYNAMIC_DRAW);
     c.glGenBuffers(1, &rect_vertex_buffer);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, rect_vertex_buffer);
-    c.glBufferData(c.GL_ARRAY_BUFFER, rect_data.len * @sizeOf(f32),
-        &rect_data[0], c.GL_STATIC_DRAW);
+    c.glBufferData(c.GL_ARRAY_BUFFER, rect_data.len * @sizeOf(f32), &rect_data[0], c.GL_STATIC_DRAW);
 }
 
 const draw_detail = 16;
@@ -300,8 +307,11 @@ fn drawGame(alpha: f32) void {
     var a1: f32 = @intToFloat(f32, W) / @intToFloat(f32, H);
     var sx: f32 = 1.0;
     var sy: f32 = 1.0;
-    if (a0 > a1) {sx = a1 / a0;}
-    else {sy = a0 / a1;}
+    if (a0 > a1) {
+        sx = a1 / a0;
+    } else {
+        sy = a0 / a1;
+    }
 
     // background
     c.glBindBuffer(c.GL_ARRAY_BUFFER, rect_vertex_buffer);
@@ -316,26 +326,24 @@ fn drawGame(alpha: f32) void {
     c.glBindBuffer(c.GL_ARRAY_BUFFER, sprite_vertex_buffer);
     c.glEnableVertexAttribArray(0); // position
     c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
-    for ([_]usize{0, 1, 2, 3}) |s| {
+    for ([_]usize{ 0, 1, 2, 3 }) |s| {
         var i: usize = 0;
         while (i <= draw_detail) : (i += 1) {
             const angle = @intToFloat(f32, i) / @intToFloat(f32, draw_detail) * std.math.pi;
-            vertex_buffer[2 * i + 0] = @cos(f32, angle);
-            vertex_buffer[2 * i + 1] = @sin(f32, angle);
-            vertex_buffer[2 * (draw_detail + 1 + i) + 0] = -@cos(f32, angle);
-            vertex_buffer[2 * (draw_detail + 1 + i) + 1] = -@sin(f32, angle) - 2.0;
+            vertex_buffer[2 * i + 0] = @cos(angle);
+            vertex_buffer[2 * i + 1] = @sin(angle);
+            vertex_buffer[2 * (draw_detail + 1 + i) + 0] = -@cos(angle);
+            vertex_buffer[2 * (draw_detail + 1 + i) + 1] = -@sin(angle) - 2.0;
             if (s == 1) { // head
                 vertex_buffer[2 * i + 1] += 2.0 * alpha - 2.0;
             } else if (s == 2) { // tail
-                vertex_buffer[2 * (draw_detail + 1 + i) + 1] += 
+                vertex_buffer[2 * (draw_detail + 1 + i) + 1] +=
                     if (game.eaten) 2.0 else 2.0 * alpha;
             } else if (s == 3) { // food
                 vertex_buffer[2 * (draw_detail + 1 + i) + 1] += 2.0;
             }
         }
-        c.glBufferSubData(c.GL_ARRAY_BUFFER, 
-            @intCast(c_long, s * vertex_buffer.len * @sizeOf(f32)), 
-            vertex_buffer.len * @sizeOf(f32), &vertex_buffer[0]);
+        c.glBufferSubData(c.GL_ARRAY_BUFFER, @intCast(c_long, s * vertex_buffer.len * @sizeOf(f32)), vertex_buffer.len * @sizeOf(f32), &vertex_buffer[0]);
     }
     const n = 2 * (draw_detail + 1);
 
@@ -351,15 +359,13 @@ fn drawGame(alpha: f32) void {
         } else if (i == game.head) {
             stype = 1;
         }
-        const translation = translateM3(
-            2.0 * @intToFloat(f32, s.x) - @intToFloat(f32, W) + 1.0, 
-            2.0 * @intToFloat(f32, s.y) - @intToFloat(f32, H) + 1.0);
+        const translation = translateM3(2.0 * @intToFloat(f32, s.x) - @intToFloat(f32, W) + 1.0, 2.0 * @intToFloat(f32, s.y) - @intToFloat(f32, H) + 1.0);
         var rt: i32 = undefined;
         switch (s.dir) {
-            Direction.NORTH => rt = 0,
-            Direction.SOUTH => rt = 2,
-            Direction.EAST  => rt = 3,
-            Direction.WEST  => rt = 1,
+            Direction.UP => rt = 0,
+            Direction.DOWN => rt = 2,
+            Direction.LEFT => rt = 3,
+            Direction.RIGHT => rt = 1,
         }
         const rotation = rotateM3(@intToFloat(f32, rt) / 2.0 * std.math.pi);
         const tmp = multiplyM3(translation, scale);
@@ -373,9 +379,7 @@ fn drawGame(alpha: f32) void {
     // food
     if (!game.gameover) {
         c.glUniform3f(color_loc, 1.0, 0.2, 0.0);
-        var translation = translateM3(
-            2.0 * @intToFloat(f32, game.food_x) - @intToFloat(f32, W) + 1.0, 
-            2.0 * @intToFloat(f32, game.food_y) - @intToFloat(f32, H) + 1.0);
+        var translation = translateM3(2.0 * @intToFloat(f32, game.food_x) - @intToFloat(f32, W) + 1.0, 2.0 * @intToFloat(f32, game.food_y) - @intToFloat(f32, H) + 1.0);
         var transform = multiplyM3(translation, scale);
         c.glUniformMatrix3fv(transform_loc, 1, c.GL_FALSE, &transform[0]);
         c.glDrawArrays(c.GL_TRIANGLE_FAN, 3 * n, n);
@@ -384,9 +388,10 @@ fn drawGame(alpha: f32) void {
     c.SDL_GL_SwapWindow(sdl_window);
 }
 
-extern fn sdlEventWatch(userdata: ?*c_void, sdl_event: [*c]c.SDL_Event) c_int {
+fn sdlEventWatch(userdata: ?*c_void, sdl_event: [*c]c.SDL_Event) callconv(.C) c_int {
     if (sdl_event.*.type == c.SDL_WINDOWEVENT and
-        sdl_event.*.window.event == c.SDL_WINDOWEVENT_RESIZED) {
+        sdl_event.*.window.event == c.SDL_WINDOWEVENT_RESIZED)
+    {
         drawGame(1.0); // draw while resizing
         return 0; // handled
     }
@@ -398,25 +403,21 @@ pub fn main() !void {
     const video_height: i32 = 640;
 
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
-        c.SDL_Log(c"Unable to initialize SDL: %s", c.SDL_GetError());
+        c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     }
     defer c.SDL_Quit();
 
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK),
-        c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK), c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 2);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLEBUFFERS), 1);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLESAMPLES), 4);
 
-    sdl_window = c.SDL_CreateWindow(c"Snake",
-        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        video_width, video_height,
-        c.SDL_WINDOW_OPENGL |
+    sdl_window = c.SDL_CreateWindow("Snake", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, video_width, video_height, c.SDL_WINDOW_OPENGL |
         c.SDL_WINDOW_RESIZABLE |
         c.SDL_WINDOW_ALLOW_HIGHDPI) orelse {
-        c.SDL_Log(c"Unable to create window: %s", c.SDL_GetError());
+        c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     };
     defer c.SDL_DestroyWindow(sdl_window);
@@ -443,10 +444,10 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
                     switch (event.key.keysym.sym) {
-                        c.SDLK_UP    => game.dir = Direction.NORTH,
-                        c.SDLK_DOWN  => game.dir = Direction.SOUTH,
-                        c.SDLK_RIGHT => game.dir = Direction.EAST,
-                        c.SDLK_LEFT  => game.dir = Direction.WEST,
+                        c.SDLK_UP => game.dir = Direction.UP,
+                        c.SDLK_DOWN => game.dir = Direction.DOWN,
+                        c.SDLK_RIGHT => game.dir = Direction.LEFT,
+                        c.SDLK_LEFT => game.dir = Direction.RIGHT,
                         else => {},
                     }
                     if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
