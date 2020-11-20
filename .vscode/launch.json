@@ -16,6 +16,18 @@
 			"externalConsole": false,
 			"MIMode": "lldb",
 			"preLaunchTask": "build"
+		},
+		{
+			"name": "(Windows) Launch",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/zig-cache/bin/snake.exe",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": true,
+			"preLaunchTask": "build"
 		}
 	]
 }

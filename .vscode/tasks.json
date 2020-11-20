@@ -9,15 +9,11 @@
 			"command": "zig build",
 			"problemMatcher": [
 				"$gcc"
-			]
-		},
-		{
-			"label": "run",
-			"type": "shell",
-			"command": "zig build run",
-			"problemMatcher": [
-				"$gcc"
-			]
+			],
+			"windows": {
+				"command": "zig build manifest"
+			},
+			"group": "build"
 		}
 	]
 }

@@ -8,9 +8,17 @@ var r = rand.DefaultPrng.init(4); // seed chosen by dice roll
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
+    @cInclude("glad/glad.h");
     @cDefine("GL_GLEXT_PROTOTYPES", "1");
     @cInclude("SDL2/SDL_opengl.h");
 });
+
+extern fn gladLoadGL() callconv(.C) c_int; // init OpenGL function pointers on Windows and Linux
+
+export fn WinMain() callconv(.C) c_int {
+    main() catch return 1; // TODO report error
+    return 0;
+}
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
@@ -424,6 +432,10 @@ pub fn main() !void {
 
     const gl_context = c.SDL_GL_CreateContext(sdl_window); // TODO: handle error
     defer c.SDL_GL_DeleteContext(gl_context);
+
+    if (std.builtin.os.tag == .windows or std.builtin.os.tag == .linux) {
+        _ = gladLoadGL();
+    }
 
     _ = c.SDL_GL_SetSwapInterval(1);
 
