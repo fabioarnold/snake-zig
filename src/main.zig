@@ -8,7 +8,7 @@ var r = rand.DefaultPrng.init(4); // seed chosen by dice roll
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
-    @cInclude("glad/glad.h");
+    @cInclude("gl2_impl.h");
     @cDefine("GL_GLEXT_PROTOTYPES", "1");
     @cInclude("SDL2/SDL_opengl.h");
 });

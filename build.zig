@@ -14,6 +14,7 @@ pub fn build(b: *Builder) !void {
         exe.subsystem = .Windows;
         exe.linkSystemLibrary("Shell32");
     }
+    exe.addIncludeDir("src/c");
     exe.addIncludeDir("lib/gl2/include");
     exe.addCSourceFile("src/c/gl2_impl.c", &[_][]const u8{ "-std=c99", "-D_CRT_SECURE_NO_WARNINGS", "-Ilib/gl2/include" });
     if (exe.target.isDarwin()) {
