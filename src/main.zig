@@ -152,7 +152,6 @@ const Game = struct {
     snake: [N]Segment,
     head: usize,
     tail: usize,
-    dir: Direction,
     next_dirs: [4]?Direction, // position [0] is first in line
 
     food_x: i32,
@@ -169,6 +168,7 @@ const Game = struct {
         self.head = 1;
         self.tail = 0;
         self.dir = Direction.DOWN;
+        self.next_dirs = null ** self.next_dirs.len;
 
         self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.DOWN);
         self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.DOWN);
