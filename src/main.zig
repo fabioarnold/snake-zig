@@ -212,7 +212,6 @@ const Game = struct {
 
         var h = &self.snake[self.head];
         var next_dir = if (self.next_dirs[0]) |d| d else h.dir;
-        // warn("next_dir = {}\n", .{next_dir});
         for (self.next_dirs) |*d, i| {
             if (i < self.next_dirs.len - 1) {
                 d.* = self.next_dirs[i + 1];
@@ -260,14 +259,6 @@ const Game = struct {
             self.eaten = false;
             self.tail = (self.tail + 1) % N;
         }
-    }
-
-    fn print_next_dirs(self: *Game) void {
-        warn("Next dirs: [", .{});
-        for (self.next_dirs) |next_dir| {
-            warn("{},", .{next_dir});
-        }
-        warn("]\n", .{});
     }
 
     fn add_next_dir(self: *Game, dir: Direction) void {
