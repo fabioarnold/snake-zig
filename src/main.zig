@@ -167,8 +167,9 @@ const Game = struct {
     fn reset(self: *Game) void {
         self.head = 1;
         self.tail = 0;
-        self.dir = Direction.DOWN;
-        self.next_dirs = null ** self.next_dirs.len;
+        for (self.next_dirs) |*d| {
+            d.* = null;
+        }
 
         self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.DOWN);
         self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.DOWN);
@@ -477,22 +478,10 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
                     switch (event.key.keysym.sym) {
-                        c.SDLK_UP => {
-                            game.dir = Direction.UP;
-                            game.add_next_dir(Direction.UP);
-                        },
-                        c.SDLK_DOWN => {
-                            game.dir = Direction.DOWN;
-                            game.add_next_dir(Direction.DOWN);
-                        },
-                        c.SDLK_RIGHT => {
-                            game.dir = Direction.RIGHT;
-                            game.add_next_dir(Direction.RIGHT);
-                        },
-                        c.SDLK_LEFT => {
-                            game.dir = Direction.LEFT;
-                            game.add_next_dir(Direction.LEFT);
-                        },
+                        c.SDLK_UP => game.add_next_dir(Direction.UP),
+                        c.SDLK_DOWN => game.add_next_dir(Direction.DOWN),
+                        c.SDLK_RIGHT => game.add_next_dir(Direction.RIGHT),
+                        c.SDLK_LEFT => game.add_next_dir(Direction.LEFT),
                         else => {},
                     }
                     if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
