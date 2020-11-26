@@ -128,6 +128,10 @@ const Direction = enum {
     DOWN,
     LEFT,
     RIGHT,
+
+    pub fn is_opposite(first: Direction, second: Direction) bool {
+        return first == Direction.UP and second == Direction.DOWN or first == Direction.DOWN and second == Direction.UP or first == Direction.LEFT and second == Direction.RIGHT or first == Direction.RIGHT and second == Direction.LEFT;
+    }
 };
 
 const Segment = struct {
@@ -149,6 +153,7 @@ const Game = struct {
     head: usize,
     tail: usize,
     dir: Direction,
+    next_dirs: [4]?Direction, // position [0] is first in line
 
     food_x: i32,
     food_y: i32,
@@ -205,35 +210,33 @@ const Game = struct {
         if (self.gameover) return;
 
         var h = &self.snake[self.head];
-        switch (h.dir) {
-            Direction.UP => {
-                if (self.dir == Direction.DOWN) self.dir = Direction.UP;
-            },
-            Direction.DOWN => {
-                if (self.dir == Direction.UP) self.dir = Direction.DOWN;
-            },
-            Direction.LEFT => {
-                if (self.dir == Direction.RIGHT) self.dir = Direction.LEFT;
-            },
-            Direction.RIGHT => {
-                if (self.dir == Direction.LEFT) self.dir = Direction.RIGHT;
-            },
+        var next_dir = if (self.next_dirs[0]) |d| d else h.dir;
+        // warn("next_dir = {}\n", .{next_dir});
+        for (self.next_dirs) |*d, i| {
+            if (i < self.next_dirs.len - 1) {
+                d.* = self.next_dirs[i + 1];
+            } else {
+                d.* = null;
+            }
         }
-        if ((self.dir == Direction.UP and h.y == H - 1) or
-            (self.dir == Direction.DOWN and h.y == 0) or
-            (self.dir == Direction.LEFT and h.x == W - 1) or
-            (self.dir == Direction.RIGHT and h.x == 0))
+        if (Direction.is_opposite(h.dir, next_dir)) {
+            next_dir = h.dir;
+        }
+        if ((next_dir == Direction.UP and h.y == H - 1) or
+            (next_dir == Direction.DOWN and h.y == 0) or
+            (next_dir == Direction.LEFT and h.x == 0) or
+            (next_dir == Direction.RIGHT and h.x == W - 1))
         {
             self.onGameover();
             return;
         }
 
         self.head = (self.head + 1) % N;
-        switch (self.dir) {
+        switch (next_dir) {
             Direction.UP => self.snake[self.head] = Segment.init(h.x, h.y + 1, Direction.UP),
             Direction.DOWN => self.snake[self.head] = Segment.init(h.x, h.y - 1, Direction.DOWN),
-            Direction.LEFT => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.LEFT),
-            Direction.RIGHT => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.RIGHT),
+            Direction.LEFT => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.LEFT),
+            Direction.RIGHT => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.RIGHT),
         }
         h = &self.snake[self.head];
 
@@ -255,6 +258,24 @@ const Game = struct {
         } else {
             self.eaten = false;
             self.tail = (self.tail + 1) % N;
+        }
+    }
+
+    fn print_next_dirs(self: *Game) void {
+        warn("Next dirs: [", .{});
+        for (self.next_dirs) |next_dir| {
+            warn("{},", .{next_dir});
+        }
+        warn("]\n", .{});
+    }
+
+    fn add_next_dir(self: *Game, dir: Direction) void {
+        for (self.next_dirs) |*d, i| {
+            const is_repeat = i != 0 and dir == self.next_dirs[i - 1].?;
+            if (d.* == null) {
+                if (!is_repeat) d.* = dir;
+                break;
+            }
         }
     }
 };
@@ -372,8 +393,8 @@ fn drawGame(alpha: f32) void {
         switch (s.dir) {
             Direction.UP => rt = 0,
             Direction.DOWN => rt = 2,
-            Direction.LEFT => rt = 3,
-            Direction.RIGHT => rt = 1,
+            Direction.LEFT => rt = 1,
+            Direction.RIGHT => rt = 3,
         }
         const rotation = rotateM3(@intToFloat(f32, rt) / 2.0 * std.math.pi);
         const tmp = multiplyM3(translation, scale);
@@ -456,10 +477,22 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
                     switch (event.key.keysym.sym) {
-                        c.SDLK_UP => game.dir = Direction.UP,
-                        c.SDLK_DOWN => game.dir = Direction.DOWN,
-                        c.SDLK_RIGHT => game.dir = Direction.LEFT,
-                        c.SDLK_LEFT => game.dir = Direction.RIGHT,
+                        c.SDLK_UP => {
+                            game.dir = Direction.UP;
+                            game.add_next_dir(Direction.UP);
+                        },
+                        c.SDLK_DOWN => {
+                            game.dir = Direction.DOWN;
+                            game.add_next_dir(Direction.DOWN);
+                        },
+                        c.SDLK_RIGHT => {
+                            game.dir = Direction.RIGHT;
+                            game.add_next_dir(Direction.RIGHT);
+                        },
+                        c.SDLK_LEFT => {
+                            game.dir = Direction.LEFT;
+                            game.add_next_dir(Direction.LEFT);
+                        },
                         else => {},
                     }
                     if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
