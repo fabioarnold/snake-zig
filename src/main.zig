@@ -128,6 +128,10 @@ const Direction = enum {
     DOWN,
     LEFT,
     RIGHT,
+
+    pub fn isOpposite(first: Direction, second: Direction) bool {
+        return first == Direction.UP and second == Direction.DOWN or first == Direction.DOWN and second == Direction.UP or first == Direction.LEFT and second == Direction.RIGHT or first == Direction.RIGHT and second == Direction.LEFT;
+    }
 };
 
 const Segment = struct {
@@ -148,7 +152,8 @@ const Game = struct {
     snake: [N]Segment,
     head: usize,
     tail: usize,
-    dir: Direction,
+    dir: ?Direction,
+    queued_dir: ?Direction,
 
     food_x: i32,
     food_y: i32,
@@ -163,7 +168,8 @@ const Game = struct {
     fn reset(self: *Game) void {
         self.head = 1;
         self.tail = 0;
-        self.dir = Direction.DOWN;
+        self.dir = null;
+        self.queued_dir = null;
 
         self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.DOWN);
         self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.DOWN);
@@ -205,35 +211,27 @@ const Game = struct {
         if (self.gameover) return;
 
         var h = &self.snake[self.head];
-        switch (h.dir) {
-            Direction.UP => {
-                if (self.dir == Direction.DOWN) self.dir = Direction.UP;
-            },
-            Direction.DOWN => {
-                if (self.dir == Direction.UP) self.dir = Direction.DOWN;
-            },
-            Direction.LEFT => {
-                if (self.dir == Direction.RIGHT) self.dir = Direction.LEFT;
-            },
-            Direction.RIGHT => {
-                if (self.dir == Direction.LEFT) self.dir = Direction.RIGHT;
-            },
+        var next_dir = if (self.dir) |d| d else h.dir;
+        self.dir = self.queued_dir;
+        self.queued_dir = null;
+        if (Direction.isOpposite(h.dir, next_dir)) {
+            next_dir = h.dir;
         }
-        if ((self.dir == Direction.UP and h.y == H - 1) or
-            (self.dir == Direction.DOWN and h.y == 0) or
-            (self.dir == Direction.LEFT and h.x == W - 1) or
-            (self.dir == Direction.RIGHT and h.x == 0))
+        if ((next_dir == Direction.UP and h.y == H - 1) or
+            (next_dir == Direction.DOWN and h.y == 0) or
+            (next_dir == Direction.LEFT and h.x == 0) or
+            (next_dir == Direction.RIGHT and h.x == W - 1))
         {
             self.onGameover();
             return;
         }
 
         self.head = (self.head + 1) % N;
-        switch (self.dir) {
+        switch (next_dir) {
             Direction.UP => self.snake[self.head] = Segment.init(h.x, h.y + 1, Direction.UP),
             Direction.DOWN => self.snake[self.head] = Segment.init(h.x, h.y - 1, Direction.DOWN),
-            Direction.LEFT => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.LEFT),
-            Direction.RIGHT => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.RIGHT),
+            Direction.LEFT => self.snake[self.head] = Segment.init(h.x - 1, h.y, Direction.LEFT),
+            Direction.RIGHT => self.snake[self.head] = Segment.init(h.x + 1, h.y, Direction.RIGHT),
         }
         h = &self.snake[self.head];
 
@@ -255,6 +253,14 @@ const Game = struct {
         } else {
             self.eaten = false;
             self.tail = (self.tail + 1) % N;
+        }
+    }
+
+    fn addNextDir(self: *Game, dir: Direction) void {
+        if (self.dir == null) {
+            self.dir = dir;
+        } else if (self.queued_dir == null and dir != self.dir.?) {
+            self.queued_dir = dir;
         }
     }
 };
@@ -372,8 +378,8 @@ fn drawGame(alpha: f32) void {
         switch (s.dir) {
             Direction.UP => rt = 0,
             Direction.DOWN => rt = 2,
-            Direction.LEFT => rt = 3,
-            Direction.RIGHT => rt = 1,
+            Direction.LEFT => rt = 1,
+            Direction.RIGHT => rt = 3,
         }
         const rotation = rotateM3(@intToFloat(f32, rt) / 2.0 * std.math.pi);
         const tmp = multiplyM3(translation, scale);
@@ -414,7 +420,6 @@ pub fn main() !void {
         c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     }
-    defer c.SDL_Quit();
 
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK), c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 2);
@@ -456,10 +461,10 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
                     switch (event.key.keysym.sym) {
-                        c.SDLK_UP => game.dir = Direction.UP,
-                        c.SDLK_DOWN => game.dir = Direction.DOWN,
-                        c.SDLK_RIGHT => game.dir = Direction.LEFT,
-                        c.SDLK_LEFT => game.dir = Direction.RIGHT,
+                        c.SDLK_UP => game.addNextDir(Direction.UP),
+                        c.SDLK_DOWN => game.addNextDir(Direction.DOWN),
+                        c.SDLK_RIGHT => game.addNextDir(Direction.RIGHT),
+                        c.SDLK_LEFT => game.addNextDir(Direction.LEFT),
                         else => {},
                     }
                     if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
