@@ -129,7 +129,7 @@ const Direction = enum {
     LEFT,
     RIGHT,
 
-    pub fn is_opposite(first: Direction, second: Direction) bool {
+    pub fn isOpposite(first: Direction, second: Direction) bool {
         return first == Direction.UP and second == Direction.DOWN or first == Direction.DOWN and second == Direction.UP or first == Direction.LEFT and second == Direction.RIGHT or first == Direction.RIGHT and second == Direction.LEFT;
     }
 };
@@ -219,7 +219,7 @@ const Game = struct {
                 d.* = null;
             }
         }
-        if (Direction.is_opposite(h.dir, next_dir)) {
+        if (Direction.isOpposite(h.dir, next_dir)) {
             next_dir = h.dir;
         }
         if ((next_dir == Direction.UP and h.y == H - 1) or
@@ -261,7 +261,7 @@ const Game = struct {
         }
     }
 
-    fn add_next_dir(self: *Game, dir: Direction) void {
+    fn addNextDir(self: *Game, dir: Direction) void {
         for (self.next_dirs) |*d, i| {
             const is_repeat = i != 0 and dir == self.next_dirs[i - 1].?;
             if (d.* == null) {
@@ -427,7 +427,6 @@ pub fn main() !void {
         c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     }
-    defer c.SDL_Quit();
 
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK), c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 2);
@@ -469,10 +468,10 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) quit = true;
                     switch (event.key.keysym.sym) {
-                        c.SDLK_UP => game.add_next_dir(Direction.UP),
-                        c.SDLK_DOWN => game.add_next_dir(Direction.DOWN),
-                        c.SDLK_RIGHT => game.add_next_dir(Direction.RIGHT),
-                        c.SDLK_LEFT => game.add_next_dir(Direction.LEFT),
+                        c.SDLK_UP => game.addNextDir(Direction.UP),
+                        c.SDLK_DOWN => game.addNextDir(Direction.DOWN),
+                        c.SDLK_RIGHT => game.addNextDir(Direction.RIGHT),
+                        c.SDLK_LEFT => game.addNextDir(Direction.LEFT),
                         else => {},
                     }
                     if (c.SDL_GetTicks() - last_ticks > 500 and game.gameover) {
