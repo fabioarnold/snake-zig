@@ -152,7 +152,8 @@ const Game = struct {
     snake: [N]Segment,
     head: usize,
     tail: usize,
-    next_dirs: [4]?Direction, // position [0] is first in line
+    dir: ?Direction,
+    queued_dir: ?Direction,
 
     food_x: i32,
     food_y: i32,
@@ -167,9 +168,8 @@ const Game = struct {
     fn reset(self: *Game) void {
         self.head = 1;
         self.tail = 0;
-        for (self.next_dirs) |*d| {
-            d.* = null;
-        }
+        self.dir = null;
+        self.queued_dir = null;
 
         self.snake[self.head] = Segment.init(W / 2, H - 3, Direction.DOWN);
         self.snake[self.tail] = Segment.init(W / 2, H - 2, Direction.DOWN);
@@ -211,14 +211,9 @@ const Game = struct {
         if (self.gameover) return;
 
         var h = &self.snake[self.head];
-        var next_dir = if (self.next_dirs[0]) |d| d else h.dir;
-        for (self.next_dirs) |*d, i| {
-            if (i < self.next_dirs.len - 1) {
-                d.* = self.next_dirs[i + 1];
-            } else {
-                d.* = null;
-            }
-        }
+        var next_dir = if (self.dir) |d| d else h.dir;
+        self.dir = self.queued_dir;
+        self.queued_dir = null;
         if (Direction.isOpposite(h.dir, next_dir)) {
             next_dir = h.dir;
         }
@@ -262,12 +257,10 @@ const Game = struct {
     }
 
     fn addNextDir(self: *Game, dir: Direction) void {
-        for (self.next_dirs) |*d, i| {
-            const is_repeat = i != 0 and dir == self.next_dirs[i - 1].?;
-            if (d.* == null) {
-                if (!is_repeat) d.* = dir;
-                break;
-            }
+        if (self.dir == null) {
+            self.dir = dir;
+        } else if (self.queued_dir == null and dir != self.dir.?) {
+            self.queued_dir = dir;
         }
     }
 };
