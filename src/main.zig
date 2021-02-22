@@ -89,7 +89,7 @@ fn initGlShader(kind: c.GLenum, source: []const u8) !c.GLuint {
 
     const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
     c.glGetShaderInfoLog(shader_id, error_size, &error_size, message.ptr);
-    panic("Error compiling {} shader:\n{}\n", .{ kind, message });
+    panic("Error compiling {any} shader:\n{s}\n", .{ kind, message });
 }
 
 fn makeShader(vert_src: []const u8, frag_src: []const u8) !c.GLuint {
@@ -108,7 +108,7 @@ fn makeShader(vert_src: []const u8, frag_src: []const u8) !c.GLuint {
         c.glGetProgramiv(program, c.GL_INFO_LOG_LENGTH, &error_size);
         const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
         c.glGetProgramInfoLog(program, error_size, &error_size, message.ptr);
-        panic("Error linking shader program: {}\n", .{message});
+        panic("Error linking shader program: {s}\n", .{message});
     }
 
     c.glDetachShader(program, vert_shader);
