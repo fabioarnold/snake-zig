@@ -6,7 +6,7 @@ pub fn build(b: *Builder) !void {
     const exe = b.addExecutable("snake", "src/main.zig");
     exe.setBuildMode(mode);
     if (exe.target.isWindows()) {
-        try exe.addVcpkgPaths(.Dynamic);
+        try exe.addVcpkgPaths(.dynamic);
         if (exe.vcpkg_bin_path) |path| {
             const sdl2dll_path = try std.fs.path.join(b.allocator, &[_][]const u8{ path, "SDL2.dll" });
             b.installBinFile(sdl2dll_path, "SDL2.dll");

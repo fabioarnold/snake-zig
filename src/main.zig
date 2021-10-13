@@ -3,6 +3,7 @@ const panic = std.debug.panic;
 const warn = std.debug.warn;
 const c_allocator = std.heap.c_allocator;
 const rand = std.rand;
+const builtin = @import("builtin");
 
 var r = rand.DefaultPrng.init(4); // seed chosen by dice roll
 
@@ -19,10 +20,6 @@ export fn WinMain() callconv(.C) c_int {
     main() catch return 1; // TODO report error
     return 0;
 }
-
-const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
-
-extern fn SDL_PollEvent(event: *c.SDL_Event) c_int;
 
 var sdl_window: *c.SDL_Window = undefined;
 
@@ -403,6 +400,7 @@ fn drawGame(alpha: f32) void {
 }
 
 fn sdlEventWatch(userdata: ?*c_void, sdl_event: [*c]c.SDL_Event) callconv(.C) c_int {
+    _ = userdata;
     if (sdl_event.*.type == c.SDL_WINDOWEVENT and
         sdl_event.*.window.event == c.SDL_WINDOWEVENT_RESIZED)
     {
@@ -421,13 +419,13 @@ pub fn main() !void {
         return error.SDLInitializationFailed;
     }
 
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_PROFILE_MASK), c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 2);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLEBUFFERS), 1);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_MULTISAMPLESAMPLES), 4);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 4);
 
-    sdl_window = c.SDL_CreateWindow("Snake", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, video_width, video_height, c.SDL_WINDOW_OPENGL |
+    sdl_window = c.SDL_CreateWindow("Snake", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, video_width, video_height, c.SDL_WINDOW_OPENGL |
         c.SDL_WINDOW_RESIZABLE |
         c.SDL_WINDOW_ALLOW_HIGHDPI) orelse {
         c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
@@ -438,7 +436,7 @@ pub fn main() !void {
     const gl_context = c.SDL_GL_CreateContext(sdl_window); // TODO: handle error
     defer c.SDL_GL_DeleteContext(gl_context);
 
-    if (std.builtin.os.tag == .windows or std.builtin.os.tag == .linux) {
+    if (builtin.os.tag == .windows or builtin.os.tag == .linux) {
         _ = gladLoadGL();
     }
 
@@ -455,7 +453,7 @@ pub fn main() !void {
     var quit = false;
     while (!quit) {
         var event: c.SDL_Event = undefined;
-        while (SDL_PollEvent(&event) != 0) {
+        while (c.SDL_PollEvent(&event) != 0) {
             switch (event.@"type") {
                 c.SDL_QUIT => quit = true,
                 c.SDL_KEYDOWN => {
