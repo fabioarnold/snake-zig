@@ -1,6 +1,5 @@
 const std = @import("std");
 const panic = std.debug.panic;
-const warn = std.debug.warn;
 const c_allocator = std.heap.c_allocator;
 const rand = std.rand;
 const builtin = @import("builtin");
@@ -179,7 +178,7 @@ const Game = struct {
 
     fn onGameover(self: *Game) void {
         self.gameover = true;
-        warn("snake length: {}\n", .{self.snakeLength()});
+        std.debug.print("snake length: {}\n", .{self.snakeLength()});
     }
 
     fn placeFood(self: *Game) void {
@@ -190,7 +189,7 @@ const Game = struct {
             const s = &self.snake[(self.tail + i) % N];
             grid[W * @intCast(usize, s.y) + @intCast(usize, s.x)] = true;
         }
-        var f = r.random.uintLessThan(usize, N - len); // choose free cell index
+        var f = r.random().uintLessThan(usize, N - len); // choose free cell index
         i = 0;
         while (i < N) : (i += 1) {
             if (!grid[i]) {
@@ -399,7 +398,7 @@ fn drawGame(alpha: f32) void {
     c.SDL_GL_SwapWindow(sdl_window);
 }
 
-fn sdlEventWatch(userdata: ?*c_void, sdl_event: [*c]c.SDL_Event) callconv(.C) c_int {
+fn sdlEventWatch(userdata: ?*anyopaque, sdl_event: [*c]c.SDL_Event) callconv(.C) c_int {
     _ = userdata;
     if (sdl_event.*.type == c.SDL_WINDOWEVENT and
         sdl_event.*.window.event == c.SDL_WINDOWEVENT_RESIZED)
